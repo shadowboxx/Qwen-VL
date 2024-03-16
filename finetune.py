@@ -17,6 +17,7 @@ from transformers.trainer_pt_utils import LabelSmoother
 from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
 from accelerate.utils import DistributedType
 
+
 IGNORE_TOKEN_ID = LabelSmoother.ignore_index
 
 
@@ -293,6 +294,9 @@ def train():
         trust_remote_code=True,
     )
     config.use_cache = False
+    # config.use_cache = True
+    device_map = 'cuda'
+    # print(f"device_map:{device_map}")
 
     # Load model and tokenizer
     model = transformers.AutoModelForCausalLM.from_pretrained(
@@ -302,7 +306,7 @@ def train():
         device_map=device_map,
         trust_remote_code=True,
         quantization_config=GPTQConfig(
-            bits=4, disable_exllama=True
+            bits=4, disable_exllama=True, use_cuda_fp16=True
         )
         if training_args.use_lora and lora_args.q_lora
         else None,

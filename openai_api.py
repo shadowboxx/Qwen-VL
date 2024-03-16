@@ -12,14 +12,16 @@ from contextlib import asynccontextmanager
 from typing import Dict, List, Literal, Optional, Union
 
 import torch
-import uvicorn
-from fastapi import FastAPI, HTTPException
+import uvicorn  
+from fastapi import FastAPI, HTTPException, File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from sse_starlette.sse import EventSourceResponse
 from transformers import AutoTokenizer, AutoModelForCausalLM
 from transformers.generation import GenerationConfig
 
+from peft import AutoPeftModelForCausalLM
+import os
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):  # collects GPU memory
@@ -358,7 +360,13 @@ async def create_chat_completion(request: ChatCompletionRequest):
         if "Observation:" not in stop_words:
             stop_words.append("Observation:")
 
+    print(request.messages)  ##
+
+    ## request.messages = tokenizer.from_list_format(request.messages)   ##
+
     query, history = parse_messages(request.messages, request.functions)
+
+    print(query)  ##
 
     if request.stream:
         if request.functions:
@@ -473,8 +481,47 @@ def _get_args():
     return args
 
 
+@app.post("/img/upload")
+async def upload_image(file: UploadFile = File(...)):
+    contents = await file.read()
+    path = f"/tmp/{file.filename}"
+    with open(path, "wb") as f:
+        f.write(contents)
+    return path
+
+    
 if __name__ == "__main__":
     args = _get_args()
+
+    model_dir = args.checkpoint_path
+    
+    if os.path.exists(os.path.join(model_dir, 'adapter_config.json')):
+        print('加载微调模型：'+model_dir)
+        model = AutoPeftModelForCausalLM.from_pretrained(
+            model_dir, trust_remote_code=True, device_map='auto', use_cache=True
+        )
+        tokenizer_dir = model.peft_config['default'].base_model_name_or_path
+    else:
+        print('加载基础模型：'+model_dir)
+        model = AutoModelForCausalLM.from_pretrained(
+            model_dir, trust_remote_code=True, device_map='auto', use_cache=True
+        )
+        tokenizer_dir = model_dir
+
+    print('加载分词器：'+tokenizer_dir)
+    tokenizer = AutoTokenizer.from_pretrained(
+        tokenizer_dir, trust_remote_code=True, use_cache=True
+    )
+
+    # 指定生成超参数（transformers 4.32.0及以上无需执行此操作）
+    # model.generation_config = GenerationConfig.from_pretrained(
+    #     tokenizer_dir,
+    #     trust_remote_code=True,
+    #     resume_download=True,
+    # )
+
+    '''
+    print('初始化 tokenizer: ' + args.checkpoint_path)
 
     tokenizer = AutoTokenizer.from_pretrained(
         args.checkpoint_path,
@@ -487,7 +534,9 @@ if __name__ == "__main__":
     else:
         device_map = "auto"
 
-    model = AutoModelForCausalLM.from_pretrained(
+    print('初始化 model: ' + args.checkpoint_path)
+
+    model = AutoPeftModelForCausalLM.from_pretrained(
         args.checkpoint_path,
         device_map=device_map,
         trust_remote_code=True,
@@ -499,5 +548,6 @@ if __name__ == "__main__":
         trust_remote_code=True,
         resume_download=True,
     )
+    '''
 
     uvicorn.run(app, host=args.server_name, port=args.server_port, workers=1)
