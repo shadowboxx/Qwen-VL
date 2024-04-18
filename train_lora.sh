@@ -16,7 +16,7 @@ python finetune.py \
     --fix_vit True \
     --output_dir $DATA/output \
     --cache_dir $DATA/cache \
-    --num_train_epochs 15 \
+    --num_train_epochs 2 \
     --per_device_train_batch_size 1 \
     --per_device_eval_batch_size 1 \
     --gradient_accumulation_steps 1 \
@@ -31,16 +31,15 @@ python finetune.py \
     --lr_scheduler_type "cosine" \
     --logging_steps 1 \
     --report_to "none" \
-    --model_max_length 256 \
+    --model_max_length 1024 \
     --lazy_preprocess True \
     --gradient_checkpointing \
     --use_lora 
 
-
 if [ $? -eq 0 ]; then
     DATESTR=`date +%Y%m%d-%H%M%S`
-    OUTPUT=./train/output_lora_$DATESTR
-    cp ./train/output $OUTPUT
+    OUTPUT=./train/output-$DATESTR-lora
+    rsync -a --exclude='*/' ./train/output/ $OUTPUT
     echo "python3 openai_api.py --server-name 0.0.0.0 --checkpoint-path $OUTPUT" > ./api.sh
     ./api.sh
 fi
